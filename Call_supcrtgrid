@@ -1,0 +1,166 @@
+#!/bin/bash
+#*******************************************************************
+#* © Regents of the University of Minnesota.  All Rights Reserved.
+#* 
+#* For licensing information please visit: 
+#* http://z.umn.edu/DBCreate
+#*
+#*
+#*******************************************************************
+
+#*******************************************************************
+#***
+#*** Author:     X.-Z. Kong
+#***             Department of Earth Sciences
+#***             University of Minnesota-TwinCities
+#***             Minneapolis, MN 55455
+#***             xkong@umn.edu
+#***
+#*******************************************************************
+
+################ EDITED BY Tucker Ely on 6Mar2017 ##################
+################ So that it only calls supcrtgrid ##################
+#################### For use with cockpit.py #######################
+
+# check check argumants
+function usage()
+{
+    echo "Usage: ./DBCreate [options]"
+    echo "Options:"
+    echo " -h,--help   : display this help message."
+    echo " -v          : display current version."
+    echo " -s FileName : specify source thermodynamic database."
+    echo " -o FileName : specify objective thermodynamic database."
+    echo " -d FileName : specify SUPCRT direct-access thermodynamic database."
+    echo " -c FileName : specify CON file (reaction-independent parameters in one-phase region)"
+    echo " -c eq36sav  : specify EQ3/6 liquid-vapo saturation curve"
+    echo " -gwb        : Geochemist's Workbench (GWB) thermodynamic database."
+    echo " -eq36       : EQ3/6 thermodynamic database."
+    echo ""
+    echo "GWB Example with CON : ./DBCreate -c fCON -s thermo.com.dat -o thermo.new.dat -d dpeq06.dat -gwb"
+    echo "GWB Example without CON : ./DBCreate -c eq36sav -s thermo.com.dat -o thermo.new.dat -d dpeq06.dat -gwb"
+    echo "EQ3/6 Example with CON: ./DBCreate -c fCON -s data0.dat -o data0.new.dat -d dpeq06.dat -eq36"
+    echo "EQ3/6 Example without CON: ./DBCreate -c eq36sav -s data0.dat -o data0.new.dat -d dpeq06.dat -eq36"
+    echo ""
+}
+if (($# < 1)); then
+    echo "  Need arguments!  To get help, Type: ./DBCreate -h "; 
+    exit 0;
+fi
+if (($# >= 1)); then
+cflag=false
+eq36=false
+sflag=false
+oflag=false
+dflag=false
+thflag=false
+ while [[ $1 == -* ]]; do
+    case "$1" in
+      -h|--help|-\?) usage; exit 0;;
+      -v) echo "DBCreate version 1.0,  August 6 2012"; exit 0;;
+      -c) fCON=$2; cflag=true; shift 2;;
+      -s) sDB=$2; sflag=true; shift 2;;
+      -o) oDB=$2; oflag=true; shift 2;;
+      -d) dDB=$2; dflag=true; shift 2;;
+      -gwb) thermoDB=2; thflag=true; shift;;
+      -eq36) thermoDB=1;thflag=true; shift;; 
+      --) shift; break;;
+      -*) echo "invalid option: $1" 1>&2; usage; exit 1;;
+    esac
+ done
+ if $cflag ; then
+  if [[ $fCON == 'eq36sav' ]]; then
+    eq36=true
+  else 
+    if [ -f "$fCON" ]; then
+      sleep 0.001; 
+    else
+      echo "  $fCON NOT found. Please Check!"; exit 0; 
+    fi
+  fi
+ else
+  echo "Use option [-c FileName/eq36sav] to specify CON file";
+  echo "        To get help, Type: ./DBCreate -h ";
+  exit 0;
+ fi
+ if $sflag ; then
+  if [ -f "$sDB" ]; then
+    sleep 0.001; 
+  else
+    echo "  $sDB NOT found. Please Check!"; exit 0; 
+  fi
+ else
+  echo "Use option [-s FileName] to specify source thermodynamic database";
+  echo "        To get help, Type: ./DBCreate -h ";
+  exit 0;
+ fi
+ if $oflag ; then
+  sleep 0.001; 
+ else
+  echo "Use option [-o FileName] to specify objective thermodynamic database";
+  echo "        To get help, Type: ./DBCreate -h ";
+  exit 0;
+ fi
+ if $dflag ; then
+  if [ -f "$dDB" ]; then
+    sleep 0.001; 
+  else
+    echo "  $dDB NOT found. Please Check!"; exit 0; 
+  fi
+ else
+  echo "Use option [-d FileName] to specify SUPCRT direct-access thermodynamic database";
+  echo "        To get help, Type: ./DBCreate -h ";
+  exit 0;
+ fi
+ if $thflag ; then
+   sleep 0.001;
+ else
+   echo "Use option [-gwb] and [-eq36] to specify Geochemist's Workbench and EQ3/6, respectively.";
+   echo "        To get help, Type: ./DBCreate -h ";
+   exit 0;
+ fi
+fi
+
+
+
+######################  STEP 1 REMOVED  ###################### 
+
+
+
+# 2. create PLOT files (kxy files) by running supcrtgrid
+#  Copy the excutable supcrtgrid binary file, CON file, rxn files, 
+#  and direct-access SUPCRT thermodynamic database in the working directory
+#    a) create file list for all rxn files
+echo 'Creating kxy files...'
+rxnlist=$(find spx*.rxn -prune -type f 2>/dev/null);
+for rxn in $rxnlist
+do 
+#    b) create an input file 'supcrt.in' for supcrtgrid, in the input file
+#      First line responds to the prompt 'specify filename for SUPCRT direct-access thermodynamic database:'  
+#      Second line responds to the prompt 'choose file option for specifying reaction-independent parameters:'
+#      Third line responds to the prompt 'specify file name of CON file'
+#      Fourth lint responds to the prompt 'specify prefix of reaction file:'
+   if $eq36 ; then
+     echo $dDB > supcrt.in         # Specify SUPCRT direct-access thermodynamic database
+     echo 1 >> supcrt.in            # Specify 2 to select one of three default files
+     echo 3 >> supcrt.in            # Specify 3 to select EQ3/6 one-phase/sat grid
+     echo ${rxn:0:5} >> supcrt.in  # Specify prefix of reaction file
+   else
+     echo $dDB > supcrt.in         # Specify SUPCRT direct-access thermodynamic database
+     echo 2 >> supcrt.in            # Specify 2 to select an existing non-default file
+     echo $fCON >> supcrt.in       # Specify CON file
+     echo ${rxn:0:5} >> supcrt.in  # Specify prefix of reaction file
+   fi 
+#     c) run supcrtgrid 
+   ./supcrtgrid < supcrt.in > supcrt.log
+done
+# rm alterted to not remove the .tab files:  TDE
+rm *.rxn *xy *.in 2>/dev/null
+echo 'Done.'
+
+
+######################  STEP 3 REMOVED  ###################### 
+
+
+#####################  Cleanup REMOVED  ###################### 
+
